@@ -34,6 +34,14 @@ import {
     isSectigoError
 } from './sectigo-types'
 
+import {
+    handleSectigoAPIError,
+    shouldRetryRequest,
+    calculateBackoffDelay,
+    logAPIRequest,
+    logAPIResponse
+} from './sectigo-error-handler'
+
 // ============================================
 // Configuration
 // ============================================
@@ -96,32 +104,78 @@ export class SectigoClient {
     }
 
     /**
-     * Make API call to Sectigo
+     * Make API call to Sectigo with retry logic and error handling
      */
-    private async call<T>(params: Record<string, string>): Promise<T> {
+    private async call<T>(params: Record<string, string>, retryCount: number = 0): Promise<T> {
+        const maxRetries = 3
+        const timeoutMs = 30000 // 30 seconds
+
+        // Log request (production-safe, no credentials)
+        logAPIRequest(params.action, params)
+
         const body = new URLSearchParams({
             loginName: this.credentials.loginName,
             loginPassword: this.credentials.loginPassword,
             ...params
         })
 
-        console.log(`[SECTIGO API] ${params.action} - Calling...`)
+        // Create abort controller for timeout
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
-        const response = await fetch(SECTIGO_CAAS_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString()
-        })
+        try {
+            const response = await fetch(SECTIGO_CAAS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+                signal: controller.signal
+            })
 
-        if (!response.ok) {
-            console.error(`[SECTIGO API] HTTP Error: ${response.status}`)
-            throw new Error(`Sectigo API error: ${response.status} ${response.statusText}`)
+            clearTimeout(timeout)
+
+            // Handle non-OK responses
+            if (!response.ok) {
+                const errorResult = await handleSectigoAPIError(response, params.action)
+
+                // Special case: Domain already exists treated as success
+                if ('success' in errorResult && errorResult.success) {
+                    logAPIResponse(params.action, true, { message: errorResult.message })
+                    // Return a success response for domain already exists
+                    return errorResult as unknown as T
+                }
+
+                // Check if we should retry
+                if (shouldRetryRequest(response.status, errorResult.errorMessage, retryCount, maxRetries)) {
+                    const delayMs = calculateBackoffDelay(retryCount)
+                    console.log(`[SECTIGO API] ${params.action} - Retry ${retryCount + 1}/${maxRetries} after ${delayMs}ms`)
+
+                    await new Promise(resolve => setTimeout(resolve, delayMs))
+                    return this.call<T>(params, retryCount + 1)
+                }
+
+                // No retry, throw error
+                logAPIResponse(params.action, false, errorResult)
+                throw new Error(errorResult.errorMessage || 'Sectigo API error')
+            }
+
+            // Success response
+            const data = await response.json()
+            logAPIResponse(params.action, data.success || true, data)
+
+            return data as T
+
+        } catch (error) {
+            clearTimeout(timeout)
+
+            // Handle timeout
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.error(`[SECTIGO API] ${params.action} - Request timeout after ${timeoutMs}ms`)
+                throw new Error(`Request timeout after ${timeoutMs / 1000} seconds`)
+            }
+
+            // Re-throw other errors
+            throw error
         }
-
-        const data = await response.json()
-        console.log(`[SECTIGO API] ${params.action} - Response:`, data.success ? 'SUCCESS' : 'FAILED')
-
-        return data as T
     }
 
     // ============================================
