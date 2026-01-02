@@ -1,0 +1,13 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "crons": [
+        {
+            "path": "/api/cron/zombie-sweeper",
+            "schedule": "0 2 * * *"
+        },
+        {
+            "path": "/api/cron/generate-settlements",
+            "schedule": "0 0 1 * *"
+        }
+    ]
+}
