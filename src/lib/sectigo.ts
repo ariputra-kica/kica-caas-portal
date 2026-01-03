@@ -266,13 +266,15 @@ export class SectigoClient {
             await new Promise(resolve => setTimeout(resolve, 300))
             console.log('[SECTIGO MOCK] GETLASTORDER:', request.domainName)
             return {
-                success: true,
-                domainName: request.domainName,
-                certificate: {
+                Orders: [{
                     orderNumber: generateMockOrderNumber(),
-                    statusCode: 2,
-                    statusDesc: 'Issued'
-                }
+                    statusCode: 6,
+                    statusDesc: 'Valid',
+                    domainName: request.domainName,
+                    serialNumber: 'MOCK123456789',
+                    validNotBefore: new Date().toISOString(),
+                    validNotAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+                }]
             }
         }
 

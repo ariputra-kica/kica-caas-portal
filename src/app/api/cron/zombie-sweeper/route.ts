@@ -117,9 +117,12 @@ export async function POST(request: Request) {
                         domainName: domainName
                     })
 
-                    if (!isSectigoError(orderResponse) &&
-                        orderResponse.certificate?.statusCode === 2) {
-                        // statusCode 2 = Issued
+                    // Check if response has Orders array with issued certificate
+                    if ('Orders' in orderResponse &&
+                        Array.isArray(orderResponse.Orders) &&
+                        orderResponse.Orders.length > 0 &&
+                        orderResponse.Orders[0].statusCode === 6) {
+                        // statusCode 6 = Valid (issued)
                         domainExists = true
                         console.log(`[Zombie Sweeper] Found via GETLASTORDER: ${domainName}`)
                     }
