@@ -455,8 +455,23 @@ let clientInstance: SectigoClient | null = null
 
 export function getSectigoClient(): SectigoClient {
     if (!clientInstance) {
-        const loginName = process.env.SECTIGO_LOGIN_NAME
-        const loginPassword = process.env.SECTIGO_LOGIN_PASSWORD
+        let loginName = process.env.SECTIGO_LOGIN_NAME
+        let loginPassword = process.env.SECTIGO_LOGIN_PASSWORD
+
+        // Support base64-encoded password for special characters
+        // If password starts with 'base64:', decode it
+        if (loginPassword?.startsWith('base64:')) {
+            loginPassword = Buffer.from(loginPassword.substring(7), 'base64').toString('utf-8')
+        }
+
+        // Debug logging (production-safe)
+        console.log('[SECTIGO DEBUG] Creating client:', {
+            loginNameExists: !!loginName,
+            loginNameLength: loginName?.length || 0,
+            passwordExists: !!loginPassword,
+            passwordLength: loginPassword?.length || 0,
+            mockModeEnabled: MOCK_MODE_ENABLED
+        })
 
         if (!loginName || !loginPassword) {
             if (MOCK_MODE_ENABLED) {
