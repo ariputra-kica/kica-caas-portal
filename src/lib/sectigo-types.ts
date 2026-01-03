@@ -178,21 +178,23 @@ export interface GetLastOrderRequest {
     domainName: string
 }
 
-export interface CertificateInfo {
+export interface OrderInfo {
     orderNumber: number
-    acmeOrderId?: string
-    certificateId?: string
+    acmeOrderID?: string
+    acmeOrderStatus?: string
+    certificateID?: number
+    statusCode: number
+    statusDesc: string
+    domainName: string
     serialNumber?: string
     validNotBefore?: string
     validNotAfter?: string
-    statusCode: number
-    statusDesc: string
+    acmeAccountID?: string
+    acmeEABKeyID?: string
 }
 
 export interface GetLastOrderSuccessResponse {
-    success: true
-    domainName: string
-    certificate: CertificateInfo
+    Orders: OrderInfo[]
 }
 
 export type GetLastOrderResponse = GetLastOrderSuccessResponse | SectigoError

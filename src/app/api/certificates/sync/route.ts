@@ -18,6 +18,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        // TEMP: Force reset singleton to reload credentials
+        const { resetSectigoClient } = await import('@/lib/sectigo')
+        resetSectigoClient()
+
         // Get all active domains
         const { data: domains } = await supabase
             .from('domains')
@@ -46,22 +50,24 @@ export async function POST(request: Request) {
                     domainName: domain.domain_name
                 })
 
-                if (isSectigoError(response) || !response.certificate) continue
+                // Check if response has Orders array (success)
+                if ('Orders' in response && Array.isArray(response.Orders) && response.Orders.length > 0) {
+                    const order = response.Orders[0] // Get first (latest) order
 
-                const cert = response.certificate
-                await supabase.from('certificates').upsert({
-                    domain_id: domain.id,
-                    order_number: cert.orderNumber?.toString() || null,
-                    certificate_id: cert.certificateId || null,
-                    serial_number: cert.serialNumber || null,
-                    valid_not_before: cert.validNotBefore || null,
-                    valid_not_after: cert.validNotAfter || null,
-                    status_code: cert.statusCode || null,
-                    status_desc: cert.statusDesc || null,
-                    synced_at: new Date().toISOString()
-                }, { onConflict: 'domain_id' })
+                    await supabase.from('certificates').upsert({
+                        domain_id: domain.id,
+                        order_number: order.orderNumber?.toString() || null,
+                        certificate_id: order.certificateID?.toString() || null,
+                        serial_number: order.serialNumber || null,
+                        valid_not_before: order.validNotBefore || null,
+                        valid_not_after: order.validNotAfter || null,
+                        status_code: order.statusCode || null,
+                        status_desc: order.statusDesc || null,
+                        synced_at: new Date().toISOString()
+                    }, { onConflict: 'domain_id' })
 
-                synced++
+                    synced++
+                }
             } catch (err) {
                 console.error(`Sync error for ${domain.domain_name}:`, err)
             }
