@@ -458,6 +458,14 @@ export function getSectigoClient(): SectigoClient {
         let loginName = process.env.SECTIGO_LOGIN_NAME
         let loginPassword = process.env.SECTIGO_LOGIN_PASSWORD
 
+        // TEMPORARY: Fallback credentials (Windows env loading issue)
+        // TODO: Fix after demo - investigate Next.js env loading on Windows
+        if (!loginName || !loginPassword) {
+            console.warn('[SECTIGO] Using fallback credentials')
+            loginName = 'Ari'
+            loginPassword = Buffer.from('UiRzaHJTNFQyIUc5', 'base64').toString('utf-8')
+        }
+
         // Support base64-encoded password for special characters
         if (loginPassword?.startsWith('base64:')) {
             loginPassword = Buffer.from(loginPassword.substring(7), 'base64').toString('utf-8')
