@@ -107,13 +107,13 @@ export default function TransactionsPage() {
         )
     })
 
-    // Calculate totals (add_domain minus refunds)
+    // Calculate totals (add_domain minus refunds) - ONLY SUCCESS
     const totalAdded = transactions
-        .filter(t => t.type === 'add_domain')
+        .filter(t => t.type === 'add_domain' && t.status === 'success')
         .reduce((sum, t) => sum + (t.amount || 0), 0)
 
     const totalRefunded = transactions
-        .filter(t => t.type === 'refund')
+        .filter(t => t.type === 'refund' && t.status === 'success')
         .reduce((sum, t) => sum + (t.amount || 0), 0)
 
     const netAmount = totalAdded - totalRefunded
@@ -151,7 +151,7 @@ export default function TransactionsPage() {
                         <div className="ml-5">
                             <p className="text-sm text-gray-500">Domains Added</p>
                             <p className="text-2xl font-bold text-gray-900">
-                                {transactions.filter(t => t.type === 'add_domain').length}
+                                {transactions.filter(t => t.type === 'add_domain' && t.status === 'success').length}
                             </p>
                         </div>
                     </div>
