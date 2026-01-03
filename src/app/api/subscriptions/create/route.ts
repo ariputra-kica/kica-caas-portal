@@ -35,10 +35,20 @@ export async function POST(request: Request) {
             )
         }
 
-        // Verify client belongs to this partner
+        // Verify client belongs to this partner and get organization anchors
         const { data: client, error: clientError } = await supabase
             .from('clients')
-            .select('id, partner_id, name')
+            .select(`
+                id, 
+                partner_id, 
+                name,
+                organization_anchors(
+                    id,
+                    ov_anchor_order_number,
+                    is_active,
+                    expires_at
+                )
+            `)
             .eq('id', clientId)
             .single()
 
@@ -56,6 +66,12 @@ export async function POST(request: Request) {
             )
         }
 
+        // Get active organization anchor for OV certificates
+        const activeAnchor = (client.organization_anchors as any[])?.find((a: any) => a.is_active)
+        const ovAnchorNumber = certificateType === 'OV' && activeAnchor
+            ? activeAnchor.ov_anchor_order_number
+            : undefined
+
         // Get partner info for email notification
         // Note: Email is from auth.users (user.email), partners table only has company_name
         const { data: partner, error: partnerError } = await supabase
@@ -71,12 +87,25 @@ export async function POST(request: Request) {
             error: partnerError?.message
         })
 
+        console.log('[OV Debug] Organization anchor:', {
+            certificateType,
+            activeAnchor,
+            ovAnchorNumber
+        })
+
         // Call Sectigo PREREGISTER API
         const sectigoClient = getSectigoClient()
-        const preregisterResponse = await sectigoClient.preregister({
+        const preregisterParams: any = {
             serverUrl,
             years: subscriptionYears as 1 | 2 | 3
-        })
+        }
+
+        // Add ovAnchorNumber for OV certificates
+        if (ovAnchorNumber) {
+            preregisterParams.ovAnchorNumber = ovAnchorNumber
+        }
+
+        const preregisterResponse = await sectigoClient.preregister(preregisterParams)
 
         // Check for Sectigo API error
         if (isSectigoError(preregisterResponse)) {
