@@ -44,10 +44,20 @@ async function getStats() {
 
     const domainIds = partnerDomains?.map(d => d.id) || []
 
-    const { count: certificateCount } = await supabase
-        .from('certificates')
-        .select('*', { count: 'exact', head: true })
-        .in('domain_id', domainIds)
+    console.log('[Dashboard] Partner domains:', partnerDomains?.length || 0)
+    console.log('[Dashboard] Domain IDs:', domainIds.length)
+
+    // Only query certificates if we have domains
+    let certificateCount = 0
+    if (domainIds.length > 0) {
+        const { count } = await supabase
+            .from('certificates')
+            .select('*', { count: 'exact', head: true })
+            .in('domain_id', domainIds)
+
+        certificateCount = count || 0
+        console.log('[Dashboard] Certificate count:', certificateCount)
+    }
 
 
     // Calculate billing cycle start and end (current month)
@@ -136,6 +146,30 @@ async function getStats() {
         .order('created_at', { ascending: false })
         .limit(5)
 
+    // Get expiring certificates (expiring within 30 days)
+    const thirtyDaysFromNow = new Date()
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+
+    let expiringCertificates: any[] = []
+    if (domainIds.length > 0) {
+        const { data: expiring } = await supabase
+            .from('certificates')
+            .select(`
+                id,
+                certificate_id,
+                status_desc,
+                valid_not_after,
+                domains!inner(id, domain_name)
+            `)
+            .in('domain_id', domainIds)
+            .lte('valid_not_after', thirtyDaysFromNow.toISOString())
+            .gt('valid_not_after', new Date().toISOString())
+            .order('valid_not_after', { ascending: true })
+            .limit(5)
+
+        expiringCertificates = expiring || []
+    }
+
     return {
         partner,
         stats: {
@@ -153,6 +187,7 @@ async function getStats() {
         },
         recentActivity: recentActivity || [],
         expiringAccounts: expiringAccounts || [],
+        expiringCertificates: expiringCertificates,
         recentTransactions: recentTransactions || []
     }
 }
@@ -208,7 +243,7 @@ export default async function DashboardPage() {
         return <div>Loading...</div>
     }
 
-    const { partner, stats, recentActivity, expiringAccounts, recentTransactions } = data
+    const { partner, stats, recentActivity, expiringAccounts, recentTransactions, expiringCertificates } = data
 
     // Trust-based billing: No credit percentage calculations for post_paid
     const isPostPaid = stats.paymentType === 'post_paid'
@@ -527,24 +562,48 @@ export default async function DashboardPage() {
                     )}
                 </div>
 
-                {/* Certificate Expiry Alerts - Coming Soon */}
+                {/* Certificate Expiry Alerts */}
                 <div className="rounded-xl bg-white/80 backdrop-blur-sm p-6 shadow-lg shadow-gray-200/50 border border-white/50">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-gray-900">🔐 Certificate Expiry Alerts</h3>
-                        <span className="text-xs bg-[#2d56c2]/10 text-[#2d56c2] px-2.5 py-1 rounded-full font-medium">Coming Soon</span>
+                        <Award className="h-5 w-5 text-emerald-500" />
                     </div>
-                    <div className="mt-4 text-center py-8">
-                        <div className="mx-auto h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
-                            <Globe className="h-6 w-6 text-gray-400" />
-                        </div>
-                        <p className="mt-3 text-sm font-medium text-gray-900">Certificate Monitoring</p>
-                        <p className="mt-1 text-xs text-gray-500">
-                            Automatic SSL/TLS certificate expiry tracking will be available in the next update.
-                        </p>
-                        <div className="mt-4 inline-flex items-center gap-1 text-xs text-blue-600">
-                            <span>🚧</span>
-                            <span>Integration in progress</span>
-                        </div>
+                    <div className="mt-4 space-y-3">
+                        {expiringCertificates.length > 0 ? (
+                            expiringCertificates.map((cert) => {
+                                const expiryDate = new Date(cert.valid_not_after)
+                                const now = new Date()
+                                const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                                const urgencyColor = daysLeft <= 7 ? 'text-red-600 bg-red-50' : daysLeft <= 14 ? 'text-amber-600 bg-amber-50' : 'text-blue-600 bg-blue-50'
+                                const dotColor = daysLeft <= 7 ? 'bg-red-500' : daysLeft <= 14 ? 'bg-amber-500' : 'bg-blue-500'
+                                const domain = Array.isArray(cert.domains) ? cert.domains[0] : cert.domains
+
+                                return (
+                                    <Link
+                                        key={cert.id}
+                                        href={`/certificates`}
+                                        className="flex items-center justify-between rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`h-2 w-2 rounded-full ${dotColor}`} />
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-900">{domain?.domain_name || 'Unknown'}</p>
+                                                <p className="text-xs text-gray-500">{cert.status_desc}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${urgencyColor}`}>
+                                            {daysLeft} days
+                                        </span>
+                                    </Link>
+                                )
+                            })
+                        ) : (
+                            <div className="text-center py-6">
+                                <Award className="mx-auto h-8 w-8 text-green-300" />
+                                <p className="mt-2 text-sm text-green-600">All certificates healthy</p>
+                                <p className="text-xs text-gray-500">No certificates expiring in the next 30 days</p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
