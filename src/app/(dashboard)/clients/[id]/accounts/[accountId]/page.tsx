@@ -42,6 +42,19 @@ export default function AcmeAccountDetailPage({
         removed_at?: string | null
         refund_transaction_id?: string | null
     }>>([])
+    const [certificates, setCertificates] = useState<Array<{
+        id: string
+        domain_id: string
+        domain_name: string
+        order_number: string | null
+        certificate_id: string | null
+        serial_number: string | null
+        valid_not_before: string | null
+        valid_not_after: string | null
+        status_code: number | null
+        status_desc: string | null
+        synced_at: string | null
+    }>>([])
     const [clientName, setClientName] = useState('')
     const [showEabKey, setShowEabKey] = useState(false)
     const [copied, setCopied] = useState<string | null>(null)
@@ -168,6 +181,36 @@ export default function AcmeAccountDetailPage({
                         ov_wildcard: Number(pricingData.ov_wildcard_annual)
                     })
                 }
+            }
+
+            // Fetch certificates for this account's domains
+            const { data: certificatesData } = await supabase
+                .from('certificates')
+                .select(`
+                    *,
+                    domains!inner(
+                        domain_name,
+                        acme_account_id
+                    )
+                `)
+                .eq('domains.acme_account_id', accountId)
+                .order('created_at', { ascending: false })
+
+            if (certificatesData) {
+                const transformed = certificatesData.map(cert => ({
+                    id: cert.id,
+                    domain_id: cert.domain_id,
+                    domain_name: (cert.domains as any).domain_name,
+                    order_number: cert.order_number,
+                    certificate_id: cert.certificate_id,
+                    serial_number: cert.serial_number,
+                    valid_not_before: cert.valid_not_before,
+                    valid_not_after: cert.valid_not_after,
+                    status_code: cert.status_code,
+                    status_desc: cert.status_desc,
+                    synced_at: cert.synced_at
+                }))
+                setCertificates(transformed)
             }
 
             setLoading(false)
@@ -1264,7 +1307,7 @@ export default function AcmeAccountDetailPage({
                 )}
             </div>
 
-            {/* Certificates Section - Phase 2 Placeholder */}
+            {/* Certificates Section */}
             <div className="rounded-lg bg-white shadow">
                 <div className="border-b border-gray-200 px-6 py-4">
                     <div className="flex items-center justify-between">
@@ -1272,27 +1315,119 @@ export default function AcmeAccountDetailPage({
                             <h3 className="text-lg font-medium text-gray-900">Certificates</h3>
                             <p className="text-sm text-gray-500">Issued certificates for this account</p>
                         </div>
-                        <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-                            Coming Soon
-                        </span>
+                        {certificates.length > 0 && (
+                            <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+                                {certificates.length} Certificate{certificates.length !== 1 ? 's' : ''}
+                            </span>
+                        )}
                     </div>
                 </div>
-                <div className="p-8 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
-                        <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
+
+                {certificates.length === 0 ? (
+                    <div className="p-8 text-center">
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+                            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <h4 className="mt-4 text-base font-medium text-gray-900">No Certificates Yet</h4>
+                        <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
+                            Certificates will appear here after they are issued via ACME.
+                            Use the EAB credentials above to configure your ACME client.
+                        </p>
                     </div>
-                    <h4 className="mt-4 text-base font-medium text-gray-900">Certificate Tracking</h4>
-                    <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto">
-                        Certificate issuance tracking will be available in Phase 2.
-                        This will sync from Sectigo&apos;s <code className="bg-gray-100 px-1 rounded">GETLASTORDER</code> API
-                        to show certificate details and expiry dates.
-                    </p>
-                    <div className="mt-4 text-xs text-gray-400">
-                        Each domain can have multiple certificates (e.g., wildcard on different servers)
-                    </div>
-                </div>
+                ) : (
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Domain
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Status
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Serial Number
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Valid From
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Expires
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Days Left
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {certificates.map((cert) => {
+                                const expiryDate = cert.valid_not_after ? new Date(cert.valid_not_after) : null
+                                const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
+                                const isExpired = daysLeft !== null && daysLeft < 0
+                                const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 30
+
+                                return (
+                                    <tr key={cert.id} className="hover:bg-gray-50">
+                                        <td className="whitespace-nowrap px-6 py-4">
+                                            <div className="flex items-center">
+                                                <Globe className="mr-2 h-5 w-5 text-gray-400" />
+                                                <span className="font-medium text-gray-900">{cert.domain_name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-6 py-4">
+                                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${isExpired
+                                                    ? 'bg-red-100 text-red-800'
+                                                    : isExpiringSoon
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : 'bg-green-100 text-green-800'
+                                                }`}>
+                                                {isExpired ? 'Expired' : cert.status_desc || 'Unknown'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <code className="text-xs text-gray-600">
+                                                {cert.serial_number || 'N/A'}
+                                            </code>
+                                        </td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                                            {cert.valid_not_before
+                                                ? new Date(cert.valid_not_before).toLocaleDateString('id-ID', {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    year: 'numeric'
+                                                })
+                                                : 'N/A'}
+                                        </td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                                            {cert.valid_not_after
+                                                ? new Date(cert.valid_not_after).toLocaleDateString('id-ID', {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    year: 'numeric'
+                                                })
+                                                : 'N/A'}
+                                        </td>
+                                        <td className="whitespace-nowrap px-6 py-4">
+                                            {daysLeft !== null ? (
+                                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${isExpired
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : isExpiringSoon
+                                                            ? 'bg-yellow-100 text-yellow-700'
+                                                            : 'bg-green-100 text-green-700'
+                                                    }`}>
+                                                    {isExpired ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft} days`}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400">N/A</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                )}
             </div>
 
             {/* Remove Domain Modal */}
