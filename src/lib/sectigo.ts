@@ -459,7 +459,6 @@ export function getSectigoClient(): SectigoClient {
         let loginPassword = process.env.SECTIGO_LOGIN_PASSWORD
 
         // Support base64-encoded password for special characters
-        // If password starts with 'base64:', decode it
         if (loginPassword?.startsWith('base64:')) {
             loginPassword = Buffer.from(loginPassword.substring(7), 'base64').toString('utf-8')
         }
@@ -475,13 +474,13 @@ export function getSectigoClient(): SectigoClient {
 
         if (!loginName || !loginPassword) {
             if (MOCK_MODE_ENABLED) {
-                console.warn('[SECTIGO] No credentials found, using mock mode with dummy credentials')
+                console.warn('[SECTIGO] No credentials found, using mock mode')
                 clientInstance = new SectigoClient({
                     loginName: 'mock_user',
                     loginPassword: 'mock_pass'
                 }, true)
             } else {
-                throw new Error('SECTIGO_LOGIN_NAME and SECTIGO_LOGIN_PASSWORD must be set when mock mode is disabled')
+                throw new Error('SECTIGO_LOGIN_NAME and SECTIGO_LOGIN_PASSWORD must be set. Check .env.local file.')
             }
         } else {
             clientInstance = new SectigoClient({
