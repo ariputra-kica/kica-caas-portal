@@ -107,16 +107,41 @@ export default function TransactionsPage() {
         )
     })
 
-    // Calculate totals (add_domain minus refunds) - ONLY SUCCESS
+    // Calculate totals for CURRENT MONTH only
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+
     const totalAdded = transactions
-        .filter(t => t.type === 'add_domain' && t.status === 'success')
+        .filter(t => {
+            const txDate = new Date(t.created_at)
+            return t.type === 'add_domain' &&
+                t.status === 'success' &&
+                txDate >= monthStart &&
+                txDate <= monthEnd
+        })
         .reduce((sum, t) => sum + (t.amount || 0), 0)
 
     const totalRefunded = transactions
-        .filter(t => t.type === 'refund' && t.status === 'success')
+        .filter(t => {
+            const txDate = new Date(t.created_at)
+            return t.type === 'refund' &&
+                t.status === 'success' &&
+                txDate >= monthStart &&
+                txDate <= monthEnd
+        })
         .reduce((sum, t) => sum + (t.amount || 0), 0)
 
     const netAmount = totalAdded - totalRefunded
+
+    // Count domains added this month
+    const domainsAddedThisMonth = transactions.filter(t => {
+        const txDate = new Date(t.created_at)
+        return t.type === 'add_domain' &&
+            t.status === 'success' &&
+            txDate >= monthStart &&
+            txDate <= monthEnd
+    }).length
 
     if (loading) {
         return <div className="flex items-center justify-center p-12">Loading...</div>
@@ -151,7 +176,7 @@ export default function TransactionsPage() {
                         <div className="ml-5">
                             <p className="text-sm text-gray-500">Domains Added</p>
                             <p className="text-2xl font-bold text-gray-900">
-                                {transactions.filter(t => t.type === 'add_domain' && t.status === 'success').length}
+                                {domainsAddedThisMonth}
                             </p>
                         </div>
                     </div>
