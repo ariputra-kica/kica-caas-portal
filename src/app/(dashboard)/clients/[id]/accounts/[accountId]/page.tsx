@@ -343,55 +343,41 @@ export default function AcmeAccountDetailPage({
             }
 
             // ============================================================
-            // PHASE 2: EXECUTE - Call Sectigo API
+            // PHASE 2: EXECUTE - Call Sectigo API via server endpoint
             // ============================================================
 
             try {
-                // Import dynamically to avoid server/client issues
-                const { getSectigoClient } = await import('@/lib/sectigo')
-                const { isSectigoError, hasOrderNumber } = await import('@/lib/sectigo-types')
-
-                const client = getSectigoClient()
-                const response = await client.addDomain({
-                    acmeAccountID: account?.acme_account_id || '',
-                    domainName: domainInfo.domain
+                // Call server-side API endpoint (not direct Sectigo client)
+                const apiResponse = await fetch('/api/domains/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        acmeAccountID: account?.acme_account_id || '',
+                        domainName: domainInfo.domain,
+                        transactionId: txData.id
+                    })
                 })
 
+                const apiData = await apiResponse.json()
+
                 // ============================================================
-                // PHASE 3: COMMIT or ROLLBACK based on API result
+                // PHASE 3: Handle API response
                 // ============================================================
 
-                if (isSectigoError(response)) {
-                    // API returned error - ROLLBACK
-                    const errorMsg = (response as { errorMessage?: string }).errorMessage || 'Unknown error'
-                    await supabase
-                        .from('transactions')
-                        .update({ status: 'failed', description: `Failed: ${errorMsg}` })
-                        .eq('id', txData.id)
-
+                if (!apiData.success) {
+                    // API returned error - already rolled back in API route
                     await supabase
                         .from('domains')
                         .update({ status: 'failed' })
                         .eq('id', domainData.id)
 
-                    results.push({ domain: domainInfo.domain, success: false, error: errorMsg })
+                    results.push({ domain: domainInfo.domain, success: false, error: apiData.error })
                     continue
                 }
 
-                // SUCCESS - COMMIT
-                const orderNumber = hasOrderNumber(response)
-                    ? (response as { orderNumber: number }).orderNumber.toString()
-                    : null
-
-                // Update transaction with success and order number
-                await supabase
-                    .from('transactions')
-                    .update({
-                        status: 'success',
-                        sectigo_order_number: orderNumber,
-                        description: `Added domain: ${domainInfo.domain}`
-                    })
-                    .eq('id', txData.id)
+                // SUCCESS - Update domain status
+                const response = apiData.data
+                const orderNumber = response?.orderNumber?.toString() || null
 
                 // Update domain with active status and order number
                 await supabase
@@ -418,8 +404,7 @@ export default function AcmeAccountDetailPage({
                     details: {
                         domain_name: domainInfo.domain,
                         price: domainInfo.price,
-                        sectigo_order_number: orderNumber,
-                        mock_mode: client.isMockMode()
+                        sectigo_order_number: orderNumber
                     }
                 })
 
@@ -1377,10 +1362,10 @@ export default function AcmeAccountDetailPage({
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${isExpired
-                                                    ? 'bg-red-100 text-red-800'
-                                                    : isExpiringSoon
-                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                        : 'bg-green-100 text-green-800'
+                                                ? 'bg-red-100 text-red-800'
+                                                : isExpiringSoon
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : 'bg-green-100 text-green-800'
                                                 }`}>
                                                 {isExpired ? 'Expired' : cert.status_desc || 'Unknown'}
                                             </span>
@@ -1411,10 +1396,10 @@ export default function AcmeAccountDetailPage({
                                         <td className="whitespace-nowrap px-6 py-4">
                                             {daysLeft !== null ? (
                                                 <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${isExpired
-                                                        ? 'bg-red-100 text-red-700'
-                                                        : isExpiringSoon
-                                                            ? 'bg-yellow-100 text-yellow-700'
-                                                            : 'bg-green-100 text-green-700'
+                                                    ? 'bg-red-100 text-red-700'
+                                                    : isExpiringSoon
+                                                        ? 'bg-yellow-100 text-yellow-700'
+                                                        : 'bg-green-100 text-green-700'
                                                     }`}>
                                                     {isExpired ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft} days`}
                                                 </span>
