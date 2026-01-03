@@ -34,11 +34,21 @@ async function getStats() {
         .select('*, acme_accounts!inner(*, clients!inner(*))', { count: 'exact', head: true })
         .eq('acme_accounts.clients.partner_id', user.id)
 
-    // Get certificate count
+
+    // Get certificate count - simplified query
+    // First get all domain IDs for this partner
+    const { data: partnerDomains } = await supabase
+        .from('domains')
+        .select('id, acme_accounts!inner(*, clients!inner(*))')
+        .eq('acme_accounts.clients.partner_id', user.id)
+
+    const domainIds = partnerDomains?.map(d => d.id) || []
+
     const { count: certificateCount } = await supabase
         .from('certificates')
-        .select('*, domains!inner(*, acme_accounts!inner(*, clients!inner(*)))', { count: 'exact', head: true })
-        .eq('domains.acme_accounts.clients.partner_id', user.id)
+        .select('*', { count: 'exact', head: true })
+        .in('domain_id', domainIds)
+
 
     // Calculate billing cycle start and end (current month)
     const now = new Date()
