@@ -48,10 +48,16 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Success - update transaction
+        // Success - extract order number and update transaction
+        const orderNumber = (response as any)?.orderNumber?.toString() || null
+
         await supabase
             .from('transactions')
-            .update({ status: 'success' })
+            .update({
+                status: 'success',
+                sectigo_order_number: orderNumber,
+                description: `Added domain: ${domainName}`
+            })
             .eq('id', transactionId)
 
         return NextResponse.json({
